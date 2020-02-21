@@ -5,7 +5,7 @@ import Dict
 import Dict.Extra as Dict
 import File exposing (File)
 import File.Select as Select
-import Html exposing (Html, button, p, text)
+import Html exposing (Html, div, button, p, text)
 import Html.Attributes exposing (style)
 import Html.Events exposing (onClick)
 import List.Extra as List
@@ -124,7 +124,11 @@ view : Model -> Html Msg
 view model =
     case model of
         "" ->
-            button [ onClick CsvRequested ] [ text "Load CSV" ]
+            div [] [
+                p [] [ text "This code assumes there's a header row and five extranneous columns at the beginning of every vote submission. I could make this more customizable if needed."]
+                , p [] [ text "A sanity check on the results will print to the web console."]
+                , button [ onClick CsvRequested ] [ text "Load CSV" ]
+            ]
 
         _ ->
             p [ style "white-space" "pre" ] [ text model ]
