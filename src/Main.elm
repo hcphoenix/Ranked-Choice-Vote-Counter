@@ -1,11 +1,11 @@
-module Main exposing (..)
+module Main exposing (main)
 
 import Browser
 import Dict
 import Dict.Extra as Dict
 import File exposing (File)
 import File.Select as Select
-import Html exposing (Html, div, button, p, text)
+import Html exposing (Html, div, button, text, h1)
 import Html.Attributes exposing (style)
 import Html.Events exposing (onClick)
 import List.Extra as List
@@ -31,12 +31,12 @@ main =
 
 
 type alias Model =
-    String
+    Html Msg
 
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( "", Cmd.none )
+    ( text "", Cmd.none )
 
 
 
@@ -64,49 +64,54 @@ update msg model =
 
         CsvLoaded content ->
             ( content
-                |> makeLineList
+                |> String.lines
+                |> List.drop 1 --Drop header row
                 |> List.map toVoteRow
-                |> Debug.log "Vote rows: "
-                |> getWinner
-                |> (++) "Winner: "
+                |> sortResults
+                |> List.map (text >> List.singleton >> Html.li [])
+                |> Html.ol []
             , Cmd.none
             )
 
-makeLineList : String -> List String
--- Strip header row and get a list of entries
-makeLineList =
-    String.split "\n" >> List.drop 1
-
 toVoteRow : String -> List String
--- Strip metadata from vote rows and split into choices ordered by preference
+-- Strip metadata from vote rows and split into choices ordered by preference.
 toVoteRow =
     String.split "," >> List.drop 5
 
-rowsToTallies : List (List String) -> List (String, Int)
--- Tallies first-choice votes as ("Choice", # votes received)
-rowsToTallies rows =
-    let firstChoices = rows |> List.filterMap List.head |> Debug.log "NEW ROUND!\nFirst choices: "
-    in Dict.frequencies firstChoices |> Dict.toList |> Debug.log "Sorted Tallies: "
+rowsToSortedTallies : List (List String) -> List (String, Int)
+-- Tallies first-choice votes as ("Choice", # votes received), sorted high to low
+rowsToSortedTallies rows =
+    let firstChoices = rows |> List.filterMap List.head |> Debug.log "First choices: "
+    in Dict.frequencies firstChoices 
+        |> Dict.toList
+        |> List.sortBy Tuple.second
+        |> List.reverse
+        |> Debug.log "Sorted Tallies: "
 
-getWinner : List (List String) -> String
-getWinner resultRows =
+sortResults : List (List String) -> List String
+sortResults = nextRound [] []
+
+nextRound : List String -> List String -> List (List String) -> List String
+nextRound winners losers voteRows =
     let
-        tallies = rowsToTallies resultRows
+        tallies = voteRows |> Debug.log ("*New Round!*\nVote rows") |> rowsToSortedTallies
 
-        (firstPlaceName, firstPlaceCount) =
-            tallies |> List.maximumBy Tuple.second |> Maybe.withDefault ( "No first place...? :(", -1 ) |> Debug.log "First place this round: "
+        (firstPlaceName, firstPlaceCount) = tallies |> List.head |> Maybe.withDefault ("", 0)
 
-        (lastPlaceName, _) =
-            tallies |> List.minimumBy Tuple.second |> Maybe.withDefault ( "No last place...? :(", -1 ) |> Debug.log "Last place this round: "
+        totalVotes = tallies |> List.map Tuple.second |> List.sum
 
-        isMajority =
-            firstPlaceCount * 2 > (tallies |> List.map Tuple.second |> List.sum)
+        isMajority = firstPlaceCount * 2 > totalVotes
 
-        filterLastPlace : List (List String) -> List (List String)
-        filterLastPlace =
-            List.map (List.filter ((/=) lastPlaceName))
+        lastPlaceName = List.last tallies |> Maybe.map Tuple.first |> Maybe.withDefault ""
+
+        removeName name = List.map (List.filter ((/=) name)) voteRows
     in
-    if isMajority then firstPlaceName else filterLastPlace resultRows |> getWinner
+    if List.isEmpty tallies
+        then winners ++ losers
+        else if isMajority
+            then nextRound (winners ++ [firstPlaceName]) losers (removeName firstPlaceName)
+            else nextRound winners (lastPlaceName :: losers)  (removeName lastPlaceName)
+
 
 
 -- VIEW
@@ -114,16 +119,12 @@ getWinner resultRows =
 
 view : Model -> Html Msg
 view model =
-    case model of
-        "" ->
-            div [] [
-                p [] [ text "This code assumes there's a header row and five extranneous columns at the beginning of every vote submission. I could make this more customizable if needed."]
-                , p [] [ text "A sanity check on the results will print to the web console."]
-                , button [ onClick CsvRequested ] [ text "Load CSV" ]
-            ]
-
-        _ ->
-            p [ style "white-space" "pre" ] [ text model ]
+    div [style "white-space" "pre"]
+        [ h1 [] [text "Ranked Choice Vote Counter"]
+        , text "This code assumes there's a header row and five extranneous columns at the beginning of every vote submission. I could make this more customizable if needed.\nA sanity check on the results will print to the web console."
+        , button [ onClick CsvRequested ] [ text "Load CSV" ]
+        , model
+        ]
 
 
 
