@@ -65,40 +65,33 @@ update msg model =
         CsvLoaded content ->
             ( content
                 |> makeLineList
-                |> List.map toResultRow
-                |> Debug.log "Result rows: "
+                |> List.map toVoteRow
+                |> Debug.log "Vote rows: "
                 |> getWinner
                 |> (++) "Winner: "
             , Cmd.none
             )
 
-
-
--- Strip header row and get a list of entries
-
-
 makeLineList : String -> List String
+-- Strip header row and get a list of entries
 makeLineList =
     String.split "\n" >> List.drop 1
 
-
-
--- Strip metadata from result rows and split into choices ordered by preference
-
-
-toResultRow : String -> List String
-toResultRow =
+toVoteRow : String -> List String
+-- Strip metadata from vote rows and split into choices ordered by preference
+toVoteRow =
     String.split "," >> List.drop 5
 
+rowsToTallies : List (List String) -> List (String, Int)
+-- Tallies first-choice votes as ("Choice", # votes received)
+rowsToTallies rows =
+    let firstChoices = rows |> List.filterMap List.head |> Debug.log "NEW ROUND!\nFirst choices: "
+    in Dict.frequencies firstChoices |> Dict.toList |> Debug.log "Sorted Tallies: "
 
 getWinner : List (List String) -> String
 getWinner resultRows =
     let
-        firstChoices =
-            resultRows |> List.filterMap List.head |> Debug.log "NEW ROUND!\nFirst choices: "
-
-        tallies =
-            Dict.frequencies firstChoices |> Dict.toList |> Debug.log "Tallies: "
+        tallies = rowsToTallies resultRows
 
         (firstPlaceName, firstPlaceCount) =
             tallies |> List.maximumBy Tuple.second |> Maybe.withDefault ( "No first place...? :(", -1 ) |> Debug.log "First place this round: "
@@ -114,7 +107,6 @@ getWinner resultRows =
             List.map (List.filter ((/=) lastPlaceName))
     in
     if isMajority then firstPlaceName else filterLastPlace resultRows |> getWinner
-
 
 
 -- VIEW
